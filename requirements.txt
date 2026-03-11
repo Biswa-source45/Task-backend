@@ -6,3 +6,4 @@ python-jose[cryptography]
 pymongo[srv]
 python-dotenv
 email-validator
+python-multipart
