@@ -58,7 +58,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 # SMTP Configuration
 SMTP_SERVER = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
+SMTP_PORT = int(os.getenv("SMTP_PORT", 465))
 SMTP_EMAIL = os.getenv("SMTP_EMAIL", "biswapvt506@gmail.com")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "ccxq roxy mqjm hrrn")
 
@@ -86,15 +86,21 @@ def send_email(to_email: str, subject: str, content: str):
     msg['From'] = SMTP_EMAIL
     msg['To'] = to_email
 
+    print(f"DEBUG: Attempting to send email to {to_email} via Port {SMTP_PORT}...")
     try:
-        server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT)
-        server.starttls()
+        # Port 465 requires SMTP_SSL
+        if SMTP_PORT == 465:
+            server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, timeout=15)
+        else:
+            server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=15)
+            server.starttls()
+            
         server.login(SMTP_EMAIL, SMTP_PASSWORD)
         server.send_message(msg)
         server.quit()
-        print(f"Email sent successfully to {to_email}")
+        print(f"✅ Email sent successfully to {to_email}")
     except Exception as e:
-        print(f"Failed to send email to {to_email}: {e}")
+        print(f"❌ Failed to send email to {to_email}: {type(e).__name__}: {e}")
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
