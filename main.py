@@ -86,21 +86,26 @@ def send_email(to_email: str, subject: str, content: str):
     msg['From'] = SMTP_EMAIL
     msg['To'] = to_email
 
-    print(f"DEBUG: Attempting to send email to {to_email} via Port {SMTP_PORT}...")
+    print(f"DEBUG: Starting SMTP process for {to_email} via Port {SMTP_PORT}...", flush=True)
     try:
         # Port 465 requires SMTP_SSL
         if SMTP_PORT == 465:
+            print(f"DEBUG: Connecting to {SMTP_SERVER} via SSL...", flush=True)
             server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, timeout=15)
         else:
+            print(f"DEBUG: Connecting to {SMTP_SERVER} via TLS...", flush=True)
             server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=15)
             server.starttls()
             
+        print(f"DEBUG: Logging in as {SMTP_EMAIL}...", flush=True)
         server.login(SMTP_EMAIL, SMTP_PASSWORD)
+        
+        print(f"DEBUG: Sending message...", flush=True)
         server.send_message(msg)
         server.quit()
-        print(f"✅ Email sent successfully to {to_email}")
+        print(f"✅ Email sent successfully to {to_email}", flush=True)
     except Exception as e:
-        print(f"❌ Failed to send email to {to_email}: {type(e).__name__}: {e}")
+        print(f"❌ Failed to send email to {to_email}: {type(e).__name__}: {e}", flush=True)
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
