@@ -9,6 +9,7 @@ from jose import JWTError, jwt
 from pymongo import MongoClient
 import os
 import smtplib
+import socket
 from email.message import EmailMessage
 from dotenv import load_dotenv
 
@@ -86,26 +87,46 @@ def send_email(to_email: str, subject: str, content: str):
     msg['From'] = SMTP_EMAIL
     msg['To'] = to_email
 
-    print(f"DEBUG: Starting SMTP process for {to_email} via Port {SMTP_PORT}...", flush=True)
-    try:
-        # Port 465 requires SMTP_SSL
-        if SMTP_PORT == 465:
-            print(f"DEBUG: Connecting to {SMTP_SERVER} via SSL...", flush=True)
-            server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, timeout=15)
-        else:
-            print(f"DEBUG: Connecting to {SMTP_SERVER} via TLS...", flush=True)
-            server = smtplib.SMTP(SMTP_SERVER, SMTP_PORT, timeout=15)
-            server.starttls()
-            
-        print(f"DEBUG: Logging in as {SMTP_EMAIL}...", flush=True)
-        server.login(SMTP_EMAIL, SMTP_PASSWORD)
+    # Try different combinations for maximum reliability on Render
+    configurations = [
+        {"port": 465, "use_ssl": True, "host": "smtp.gmail.com"},
+        {"port": 587, "use_ssl": False, "host": "smtp.gmail.com"},
+        {"port": 465, "use_ssl": True, "host": "smtp.googlemail.com"},
+    ]
+
+    print(f"DEBUG: Starting SMTP process for {to_email}...", flush=True)
+    
+    last_error = None
+    for config in configurations:
+        current_host = config["host"]
+        current_port = config["port"]
+        use_ssl = config["use_ssl"]
         
-        print(f"DEBUG: Sending message...", flush=True)
-        server.send_message(msg)
-        server.quit()
-        print(f"✅ Email sent successfully to {to_email}", flush=True)
-    except Exception as e:
-        print(f"❌ Failed to send email to {to_email}: {type(e).__name__}: {e}", flush=True)
+        try:
+            print(f"DEBUG: Attempting {current_host}:{current_port} ({'SSL' if use_ssl else 'TLS'})...", flush=True)
+            
+            # Force IPv4 by resolving hostname manually
+            # This fixes "Network is unreachable" issues on some cloud providers
+            ipv4_addr = socket.gethostbyname(current_host)
+            
+            if use_ssl:
+                server = smtplib.SMTP_SSL(ipv4_addr, current_port, timeout=10)
+            else:
+                server = smtplib.SMTP(ipv4_addr, current_port, timeout=10)
+                server.starttls()
+            
+            server.login(SMTP_EMAIL, SMTP_PASSWORD)
+            server.send_message(msg)
+            server.quit()
+            print(f"✅ Email sent successfully to {to_email} via {current_port}", flush=True)
+            return # Success!
+            
+        except Exception as e:
+            last_error = e
+            print(f"DEBUG: {current_port} failed: {type(e).__name__}: {e}", flush=True)
+            continue
+
+    print(f"❌ All SMTP attempts failed for {to_email}. Last error: {last_error}", flush=True)
 
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     credentials_exception = HTTPException(
