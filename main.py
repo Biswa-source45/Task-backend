@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 import bcrypt
@@ -79,7 +79,7 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-async def send_email(to_email: str, subject: str, content: str):
+def send_email(to_email: str, subject: str, content: str):
     msg = EmailMessage()
     msg.set_content(content)
     msg['Subject'] = subject
@@ -177,7 +177,7 @@ async def login_user(user_login: UserLogin):
 
 # Manager Routes
 @app.post("/employees", response_model=UserResponse)
-async def create_employee(user: UserCreate, current_user: dict = Depends(check_manager_role)):
+async def create_employee(user: UserCreate, background_tasks: BackgroundTasks, current_user: dict = Depends(check_manager_role)):
     existing_user = users_collection.find_one({"email": user.email})
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
@@ -220,7 +220,7 @@ async def create_employee(user: UserCreate, current_user: dict = Depends(check_m
 
     Please login and change your password.
     """
-    await send_email(user.email, "Your Employee Account", email_content)
+    background_tasks.add_task(send_email, user.email, "Your Employee Account", email_content)
     
     user_out = users_collection.find_one({"_id": result.inserted_id})
     user_out["id"] = str(user_out["_id"])
@@ -322,7 +322,7 @@ async def get_all_leaves(current_user: dict = Depends(check_manager_role)):
     return leaves
 
 @app.put("/leaves/{leave_id}")
-async def update_leave_status(leave_id: str, update_data: LeaveStatusUpdate, current_user: dict = Depends(check_manager_role)):
+async def update_leave_status(leave_id: str, update_data: LeaveStatusUpdate, background_tasks: BackgroundTasks, current_user: dict = Depends(check_manager_role)):
     try:
         obj_id = ObjectId(leave_id)
     except:
@@ -385,7 +385,8 @@ async def update_leave_status(leave_id: str, update_data: LeaveStatusUpdate, cur
         
         # Send Email
         if employee:
-            await send_email(
+            background_tasks.add_task(
+                send_email,
                 employee["email"],
                 "Leave Application Approved",
                 f"Your leave request for {leave_req['days']} days from {leave_req['start_date']} to {leave_req['end_date']} has been approved."
@@ -394,7 +395,8 @@ async def update_leave_status(leave_id: str, update_data: LeaveStatusUpdate, cur
     elif update_data.status == "rejected":
         if employee:
             admin_comment = update_data.manager_comment or "No reason provided."
-            await send_email(
+            background_tasks.add_task(
+                send_email,
                 employee["email"],
                 "Leave Application Rejected",
                 f"Your leave request from {leave_req['start_date']} to {leave_req['end_date']} has been rejected.\nManager Comment: {admin_comment}"
